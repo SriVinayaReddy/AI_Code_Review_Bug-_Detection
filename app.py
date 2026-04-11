@@ -5,16 +5,34 @@ import os
 from groq import Groq
 from dotenv import load_dotenv
 
+# Load local .env (for localhost)
 load_dotenv()
-client = Groq(
-    api_key=st.secrets["GROQ_API_KEY"]
-)
+
+# -------------------------------
+# API Key Handling (Robust)
+# -------------------------------
+api_key = None
+
+# Try Streamlit Secrets (Cloud)
+if "GROQ_API_KEY" in st.secrets:
+    api_key = st.secrets["GROQ_API_KEY"]
+
+# Fallback to .env (Local)
+elif os.getenv("GROQ_API_KEY"):
+    api_key = os.getenv("GROQ_API_KEY")
+
+# If no key found → stop app safely
+if not api_key:
+    st.error("🚨 GROQ_API_KEY not found! Add it in Streamlit Secrets or .env file.")
+    st.stop()
+
+# Initialize Groq client
+client = Groq(api_key=api_key)
 
 SUPPORTED_LANGUAGES = ["Python", "Java", "C", "C++", "JavaScript"]
 
 # -------------------------------
 # Function: Static Analysis
-# Only works for Python via pylint
 # -------------------------------
 def run_static_analysis(code, language):
     if language != "Python":
@@ -23,11 +41,13 @@ def run_static_analysis(code, language):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".py") as tmp:
         tmp.write(code.encode())
         tmp.close()
+
         result = subprocess.run(
             ["pylint", tmp.name, "--disable=all", "--enable=E,W"],
             capture_output=True,
             text=True
         )
+
         return result.stdout or "✅ No major issues found by Pylint."
 
 
@@ -40,23 +60,22 @@ You are a senior software engineer specializing in code review.
 
 Analyze the following {language} code and provide:
 
-1. **Bug Detection**: List all bugs, errors, or crashes you find
-2. **Code Quality Issues**: Point out bad practices or inefficiencies
-3. **Security Issues**: Flag any security vulnerabilities
-4. **Corrected Code**: Provide the fixed version of the code
-5. **Overall Rating**: Rate as Good / Needs Work / Poor
+1. Bug Detection
+2. Code Quality Issues
+3. Security Issues
+4. Corrected Code
+5. Overall Rating
 
-Be specific and beginner-friendly in your explanations.
-
-```{language}
+Code:
 {code}
-```
 """
+
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[{"role": "user", "content": prompt}],
         temperature=0.3
     )
+
     return response.choices[0].message.content
 
 
@@ -70,7 +89,7 @@ st.set_page_config(
 )
 
 st.title("🤖 AI Code Reviewer & Bug Detector")
-st.markdown("Powered by Gemini 1.5 Flash + Pylint | Supports Python, Java, C, C++, JavaScript")
+st.markdown("Powered by Groq (LLaMA) + Pylint")
 st.divider()
 
 col1, col2 = st.columns([1, 1])
@@ -95,4 +114,4 @@ with col2:
                 ai_output = ai_code_review(code_input, language)
                 st.markdown(ai_output)
     else:
-        st.info("👈 Paste your code and hit Analyze to get started.")
+        st.info("👈 Paste your code and click Analyze to get started.")
